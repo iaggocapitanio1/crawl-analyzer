@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(py -0)",
+      "Bash(where python *)",
+      "Bash(py -3.12 -m venv backend/.venv)",
+      "Bash(backend/.venv/Scripts/python.exe -m pip install --upgrade pip)",
+      "Bash(backend/.venv/Scripts/pip.exe install *)",
+      "Bash(backend/.venv/Scripts/python.exe -c \"import django, sys; print\\('python', sys.version.split\\(\\)[0]\\); print\\('django', django.get_version\\(\\)\\)\")",
+      "Bash(backend/.venv/Scripts/python.exe -m pip list)",
+      "Bash(backend/.venv/Scripts/python.exe -c \"import sys; print\\(sys.executable\\); print\\(sys.path\\)\")",
+      "Bash(.venv/Scripts/python.exe -m pip install -r requirements.txt)",
+      "Bash(.venv/Scripts/python.exe -c \"import django; print\\('django', django.get_version\\(\\)\\)\")",
+      "Bash(.venv/Scripts/python.exe --version)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(echo \"TSC_EXIT: $?\")",
+      "Bash(./.venv/Scripts/python.exe -m pip install \"Faker==30.8.2\")",
+      "Bash(./.venv/Scripts/python.exe manage.py seed_domains --count 10000 --seed 42)",
+      "Bash(./.venv/Scripts/python.exe -c \"import django, os; os.environ.setdefault\\('DJANGO_SETTINGS_MODULE','crawler.settings'\\); django.setup\\(\\); from crawl.models import Domain; print\\('Total domains:', Domain.objects.count\\(\\)\\)\")"
+    ]
+  }
+}

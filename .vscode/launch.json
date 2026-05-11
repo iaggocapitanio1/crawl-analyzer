@@ -1,0 +1,177 @@
+{
+  // NOTE: backend/.env uses Docker service names (DB_HOST=db, redis://redis:6379).
+  // When debugging outside Docker, override DB_HOST/CELERY_BROKER_URL in the
+  // matching `env` block below, or run these launches inside the container.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Django: runserver",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/manage.py",
+      "args": ["runserver", "127.0.0.1:8080", "--noreload"],
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "django": true,
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "envFile": "${workspaceFolder}/backend/.env",
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "DJANGO_SETTINGS_MODULE": "crawler.settings",
+        "DB_HOST": "127.0.0.1",
+        "CELERY_BROKER_URL": "redis://127.0.0.1:6379/0",
+        "CELERY_RESULT_BACKEND": "redis://127.0.0.1:6379/0"
+      }
+    },
+    {
+      "name": "Django: shell",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/manage.py",
+      "args": ["shell"],
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "envFile": "${workspaceFolder}/backend/.env",
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "crawler.settings",
+        "DB_HOST": "127.0.0.1"
+      }
+    },
+    {
+      "name": "Django: pytest (current file)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["${file}", "-v", "-s"],
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "envFile": "${workspaceFolder}/backend/.env",
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "crawler.settings",
+        "DB_HOST": "127.0.0.1"
+      }
+    },
+    {
+      "name": "Django: pytest (all)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["-v"],
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "envFile": "${workspaceFolder}/backend/.env",
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "crawler.settings",
+        "DB_HOST": "127.0.0.1"
+      }
+    },
+    {
+      "name": "Celery: worker (foreground)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "args": [
+        "-A",
+        "crawler",
+        "worker",
+        "--loglevel=info",
+        "--pool=solo"
+      ],
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "envFile": "${workspaceFolder}/backend/.env",
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "DJANGO_SETTINGS_MODULE": "crawler.settings",
+        "DB_HOST": "127.0.0.1",
+        "CELERY_BROKER_URL": "redis://127.0.0.1:6379/0",
+        "CELERY_RESULT_BACKEND": "redis://127.0.0.1:6379/0"
+      }
+    },
+    {
+      "name": "Celery: beat",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "celery",
+      "args": ["-A", "crawler", "beat", "--loglevel=info"],
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "envFile": "${workspaceFolder}/backend/.env",
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "DJANGO_SETTINGS_MODULE": "crawler.settings",
+        "DB_HOST": "127.0.0.1",
+        "CELERY_BROKER_URL": "redis://127.0.0.1:6379/0",
+        "CELERY_RESULT_BACKEND": "redis://127.0.0.1:6379/0"
+      }
+    },
+    {
+      // Real Node debugger attached to `next dev` — breakpoints work in
+      // Server Components, Route Handlers, Server Actions, middleware/proxy.
+      "name": "Next.js: server (debug)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "${workspaceFolder}/frontend",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "serverReadyAction": {
+        "pattern": "- Local:\\s+http://.+:(\\d+)",
+        "uriFormat": "http://localhost:%s",
+        "action": "debugWithChrome",
+        "webRoot": "${workspaceFolder}/frontend"
+      }
+    },
+    {
+      "name": "Next.js: client (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/frontend",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "sourceMapPathOverrides": {
+        "webpack://_N_E/*": "${webRoot}/*",
+        "webpack:///./*": "${webRoot}/*",
+        "webpack:///src/*": "${webRoot}/src/*"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full stack: Django + Next.js",
+      "configurations": ["Django: runserver", "Next.js: server (debug)"],
+      "stopAll": true
+    },
+    {
+      "name": "Full stack: Django + Celery + Next.js",
+      "configurations": [
+        "Django: runserver",
+        "Celery: worker (foreground)",
+        "Next.js: server (debug)"
+      ],
+      "stopAll": true
+    },
+    {
+      "name": "Full stack: Django + Celery + Beat + Next.js",
+      "configurations": [
+        "Django: runserver",
+        "Celery: worker (foreground)",
+        "Celery: beat",
+        "Next.js: server (debug)"
+      ],
+      "stopAll": true
+    }
+  ]
+}

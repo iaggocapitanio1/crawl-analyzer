@@ -1,14 +1,16 @@
-import csv
-
-from django.http import FileResponse, Http404, HttpResponse
+from django.db import transaction
+from django.db.models import Count, Q, Sum
+from django.http import FileResponse, Http404, JsonResponse
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.response import Response
 
 from .filters import PageFilter
 from .models import Domain, Page, ExportJob
+from .pagination import StandardPagination
 from .providers import (
     fetch_domain_authority,
     fetch_backlink_count,
@@ -21,10 +23,16 @@ from .serializers import (
     PageDetailSerializer,
     ExportJobSerializer,
 )
+from .tasks import build_export
 
 
 class DomainViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Domain.objects.all().order_by('host')
+    pagination_class = StandardPagination
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ['host', 'registered_domain']
+    ordering_fields = ['host', 'first_seen_at', 'last_seen_at', 'page_count']
+    ordering = ['host']
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -63,7 +71,12 @@ class DomainViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class PageViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Page.objects.select_related('domain').order_by('-fetched_at')
+    queryset = (
+        Page.objects
+        .select_related('domain')
+        .prefetch_related('links')
+        .order_by('-fetched_at')
+    )
     filter_backends = [DjangoFilterBackend]
     filterset_class = PageFilter
 
@@ -89,34 +102,21 @@ class PageViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ExportJobViewSet(viewsets.ModelViewSet):
-    queryset = ExportJob.objects.all()
+    queryset = ExportJob.objects.all().order_by('-created_at')
     serializer_class = ExportJobSerializer
     http_method_names = ['get', 'post', 'head', 'options']
 
     def create(self, request, *args, **kwargs):
-        filter_params = request.data.get('filter_params') or {}
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        job = serializer.save(status='pending')
 
-        qs = Page.objects.select_related('domain').all()
-        if 'domain' in filter_params:
-            qs = qs.filter(domain_id=filter_params['domain'])
-        if 'http_status' in filter_params:
-            qs = qs.filter(http_status=filter_params['http_status'])
-        if 'language' in filter_params:
-            qs = qs.filter(language=filter_params['language'])
-        if 'search' in filter_params:
-            search = filter_params['search']
-            qs = qs.filter(title__icontains=search) | qs.filter(url__icontains=search)
+        transaction.on_commit(lambda: build_export.delay(job.id))
 
-        response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = 'attachment; filename="export.csv"'
-        writer = csv.writer(response)
-        writer.writerow(['url', 'host', 'http_status', 'title', 'language', 'fetched_at'])
-        for page in qs.iterator():
-            writer.writerow([
-                page.url, page.domain.host, page.http_status,
-                page.title, page.language or '', page.fetched_at.isoformat(),
-            ])
-        return response
+        return Response(
+            self.get_serializer(job).data,
+            status=status.HTTP_202_ACCEPTED,
+        )
 
     @action(detail=True, methods=['get'])
     def download(self, request, pk=None):
@@ -131,36 +131,22 @@ class ExportJobViewSet(viewsets.ModelViewSet):
 
 def stats_view(request):
     """Dashboard KPIs."""
-    from django.http import JsonResponse
-
-    total_domains = 0
-    for _ in Domain.objects.all():
-        total_domains += 1
-
-    total_pages = 0
-    pages_2xx = 0
-    pages_4xx = 0
-    pages_5xx = 0
-    total_backlinks = 0
-
-    for page in Page.objects.all():
-        total_pages += 1
-        if 200 <= page.http_status < 300:
-            pages_2xx += 1
-        elif 400 <= page.http_status < 500:
-            pages_4xx += 1
-        elif 500 <= page.http_status < 600:
-            pages_5xx += 1
-
-    for domain in Domain.objects.all():
-        if domain.backlink_count is not None:
-            total_backlinks += domain.backlink_count
+    page_stats = Page.objects.aggregate(
+        total=Count('id'),
+        pages_2xx=Count('id', filter=Q(http_status__gte=200, http_status__lt=300)),
+        pages_4xx=Count('id', filter=Q(http_status__gte=400, http_status__lt=500)),
+        pages_5xx=Count('id', filter=Q(http_status__gte=500, http_status__lt=600)),
+    )
+    domain_stats = Domain.objects.aggregate(
+        total=Count('id'),
+        total_backlinks=Sum('backlink_count'),
+    )
 
     return JsonResponse({
-        'total_domains': total_domains,
-        'total_pages': total_pages,
-        'pages_2xx': pages_2xx,
-        'pages_4xx': pages_4xx,
-        'pages_5xx': pages_5xx,
-        'total_backlinks': total_backlinks,
+        'total_domains': domain_stats['total'],
+        'total_pages': page_stats['total'],
+        'pages_2xx': page_stats['pages_2xx'],
+        'pages_4xx': page_stats['pages_4xx'],
+        'pages_5xx': page_stats['pages_5xx'],
+        'total_backlinks': domain_stats['total_backlinks'] or 0,
     })

@@ -5,10 +5,10 @@ introduced when needed.
 """
 import csv
 import os
-from datetime import datetime
 
 from celery import shared_task
 from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
 
 from .models import ExportJob, Page
@@ -26,8 +26,12 @@ def build_export(export_job_id: int) -> None:
     job.status = 'running'
     job.save(update_fields=['status'])
 
-    qs = Page.objects.select_related('domain').all()
     params = job.filter_params or {}
+    qs = (
+        Page.objects
+        .select_related('domain')
+        .only('url', 'http_status', 'title', 'language', 'fetched_at', 'domain__host')
+    )
     if 'domain' in params:
         qs = qs.filter(domain_id=params['domain'])
     if 'http_status' in params:
@@ -36,7 +40,7 @@ def build_export(export_job_id: int) -> None:
         qs = qs.filter(language=params['language'])
     if 'search' in params:
         search = params['search']
-        qs = qs.filter(title__icontains=search) | qs.filter(url__icontains=search)
+        qs = qs.filter(Q(title__icontains=search) | Q(url__icontains=search))
 
     os.makedirs(settings.EXPORTS_ROOT, exist_ok=True)
     filename = f'export_{job.id}.csv'
