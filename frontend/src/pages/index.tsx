@@ -54,13 +54,16 @@ function BacklinkPanel({
 export default function Home() {
   const { data: stats, error: statsError, isLoading: statsLoading } = useSWR<Stats>(
     '/api/stats/',
-    { refreshInterval: 30000 },
+    // Stats are cached server-side for 60s, so polling more often is wasted
+    // work. Disable focus revalidation here so background tabs don't hammer
+    // the aggregate query every time the user tabs back.
+    { refreshInterval: 120000, revalidateOnFocus: false },
   );
   // Home is a dashboard, not a domain browser — show the top domains by page
   // volume so the default selection is meaningful. For full browsing the user
   // navigates to /domains.
   const { data: domainsPage } = useSWR<Paginated<Domain>>(
-    '/api/domains/?ordering=-page_count&page_size=100',
+    '/api/domains/?ordering=-page_count&page_size=10',
   );
   const domains = useMemo(() => domainsPage?.results ?? [], [domainsPage]);
 

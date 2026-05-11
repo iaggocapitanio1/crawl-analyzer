@@ -1,3 +1,4 @@
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.http import FileResponse, Http404, JsonResponse
@@ -71,14 +72,16 @@ class DomainViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class PageViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = (
-        Page.objects
-        .select_related('domain')
-        .prefetch_related('links')
-        .order_by('-fetched_at')
-    )
     filter_backends = [DjangoFilterBackend]
     filterset_class = PageFilter
+
+    def get_queryset(self):
+        qs = Page.objects.select_related('domain').order_by('-fetched_at')
+        # links are only serialized on detail; prefetching on list inflates
+        # the query for every page in the page_size=50 response.
+        if self.action != 'list':
+            qs = qs.prefetch_related('links')
+        return qs
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -129,8 +132,11 @@ class ExportJobViewSet(viewsets.ModelViewSet):
             raise Http404('export file missing')
 
 
-def stats_view(request):
-    """Dashboard KPIs."""
+STATS_CACHE_KEY = 'dashboard:stats:v1'
+STATS_CACHE_TTL = 60
+
+
+def _compute_stats():
     page_stats = Page.objects.aggregate(
         total=Count('id'),
         pages_2xx=Count('id', filter=Q(http_status__gte=200, http_status__lt=300)),
@@ -141,12 +147,18 @@ def stats_view(request):
         total=Count('id'),
         total_backlinks=Sum('backlink_count'),
     )
-
-    return JsonResponse({
+    return {
         'total_domains': domain_stats['total'],
         'total_pages': page_stats['total'],
         'pages_2xx': page_stats['pages_2xx'],
         'pages_4xx': page_stats['pages_4xx'],
         'pages_5xx': page_stats['pages_5xx'],
         'total_backlinks': domain_stats['total_backlinks'] or 0,
-    })
+    }
+
+
+def stats_view(request):
+    """Dashboard KPIs. Cached for STATS_CACHE_TTL seconds — the dashboard
+    polls this, so trading minute-old data for cheap reads is the right call."""
+    payload = cache.get_or_set(STATS_CACHE_KEY, _compute_stats, STATS_CACHE_TTL)
+    return JsonResponse(payload)
