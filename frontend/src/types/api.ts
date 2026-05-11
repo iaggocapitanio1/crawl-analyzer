@@ -37,6 +37,7 @@ export interface PageSummary {
   fetched_at: string;
   title: string;
   language: string | null;
+  links: PageLink[];
 }
 
 export interface PageDetail extends PageSummary {
@@ -45,7 +46,6 @@ export interface PageDetail extends PageSummary {
   meta_keywords: string;
   seo_score: number | null;
   seo_fetched_at: string | null;
-  links: PageLink[];
 }
 
 export interface DomainInsights {

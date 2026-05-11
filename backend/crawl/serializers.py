@@ -30,13 +30,16 @@ class DomainDetailSerializer(serializers.ModelSerializer):
 
 
 class PageListSerializer(serializers.ModelSerializer):
+    # Bug 1 (N+1): rendering outbound links here forces a per-row query when no
+    # prefetch is applied on the viewset queryset.
+    links = PageLinkSerializer(many=True, read_only=True)
     host = serializers.CharField(source='domain.host', read_only=True)
 
     class Meta:
         model = Page
         fields = [
             'id', 'domain', 'host', 'url', 'http_status', 'content_type',
-            'fetched_at', 'title', 'language',
+            'fetched_at', 'title', 'language', 'links',
         ]
 
 
